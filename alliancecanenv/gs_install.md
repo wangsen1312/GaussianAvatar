@@ -46,14 +46,14 @@ add dgr(..antialiasing=True) for newer dgr require this
 rendered_image, _, _ = rasterizer()  # return 3 parts
 
 2. dataloader part
-under scene/dataset_mono.py
+under scene/dataset_mono.py [train and test two parts]
 # color_img = image * mask + (1 - mask) * 255
 # image = Image.fromarray(np.array(color_img, dtype=np.byte), "RGB")
 img_np = np.array(image, dtype=np.uint8)          # <-- add this
 color_img = img_np * mask + (1 - mask) * 255
 image = Image.fromarray(color_img.astype(np.uint8), "RGB")  # <-- change dtype
 
-3. for the train.py part 
+3. for the train.py part [delete open3d, just use here]
 line 4 change open3d to import trimesh
 line 108 -111
 change from 
@@ -65,7 +65,21 @@ for i in range(save_points.shape[0]):
     pc = trimesh.points.PointCloud(save_points[i].astype(np.float32))
     pc.export(os.path.join(out_dir, f"pred_{i}.ply"))
 
+4. speedup a little 
 
+1) for the model/modules.py  ShapeDecoder function. Use silu and GroupNorm instead batchnorm
+2) for the model/avatar_model.py part, for the use torch.compile to speed small kernels
+# (Optional) speedups on Ampere/Hopper for matmul/conv
+torch.backends.cuda.matmul.allow_tf32 = True   # matmul lives here
+torch.backends.cudnn.allow_tf32 = True         #  convs via cuDNN
+
+# PyTorch 2.x recommended knob for matmul kernels
+torch.set_float32_matmul_precision("high")     # or "medium"
+    
+    self.net = POP_no_unet(...)
+
+    # Compile the network
+    self.net = torch.compile(self.net, mode="reduce-overhead") 
 
 # Also can use interactive mode allocate GPU to build modules
 salloc --account=def-xinxin --gres=gpu:nvidia_h100_80gb_hbm3_1g.10gb:1 --cpus-per-task=12 --mem=120gb --time=00:20:00

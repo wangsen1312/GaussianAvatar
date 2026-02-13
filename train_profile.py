@@ -16,6 +16,13 @@ from utils.general_utils import to_cuda, adjust_loss_weights
 from torch.utils.tensorboard import SummaryWriter
 from torch.profiler import profile, ProfilerActivity, schedule, tensorboard_trace_handler
 
+# (Optional) speedups on Ampere/Hopper for matmul/conv
+torch.backends.cuda.matmul.allow_tf32 = True   # matmul lives here
+torch.backends.cudnn.allow_tf32 = True         #  convs via cuDNN
+
+# PyTorch 2.x recommended knob for matmul kernels
+torch.set_float32_matmul_precision("high")     # or "medium"
+
 def train(model, net, opt, saving_epochs, checkpoint_epochs):
     tb_writer = prepare_output_and_logger(model)
     avatarmodel = AvatarModel(model, net, opt, train=True)

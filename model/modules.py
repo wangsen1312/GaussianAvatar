@@ -503,80 +503,154 @@ class activate_module(nn.Module):
 
 
 class ShapeDecoder(nn.Module):
-    '''
-    The "Shape Decoder" in the POP paper Fig. 2. The same as the "shared MLP" in the SCALE paper.
-    - with skip connection from the input features to the 4th layer's output features (like DeepSDF)
-    - branches out at the second-to-last layer, one branch for position pred, one for normal pred
-    '''
-    def __init__(self, in_size, hsize = 256, actv_fn='softplus'):
+    def __init__(self, in_size, hsize=256, actv_fn='silu', gn_groups=32):
+        super().__init__()
         self.hsize = hsize
-        super(ShapeDecoder, self).__init__()
-        self.conv1 = torch.nn.Conv1d(in_size, self.hsize, 1)
-        self.conv2 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv3 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv4 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv5 = torch.nn.Conv1d(self.hsize+in_size, self.hsize, 1)
-        self.conv6 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv7 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv8 = torch.nn.Conv1d(self.hsize, 3, 1)
 
-        self.conv6SH = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv7SH = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv8SH = torch.nn.Conv1d(self.hsize, 3, 1)
+        self.conv1 = nn.Conv1d(in_size, hsize, 1)
+        self.conv2 = nn.Conv1d(hsize, hsize, 1)
+        self.conv3 = nn.Conv1d(hsize, hsize, 1)
+        self.conv4 = nn.Conv1d(hsize, hsize, 1)
+        self.conv5 = nn.Conv1d(hsize + in_size, hsize, 1)
+        self.conv6 = nn.Conv1d(hsize, hsize, 1)
+        self.conv7 = nn.Conv1d(hsize, hsize, 1)
+        self.conv8 = nn.Conv1d(hsize, 3, 1)
 
-        self.conv6N = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv7N = torch.nn.Conv1d(self.hsize, self.hsize, 1)
-        self.conv8N = torch.nn.Conv1d(self.hsize, 1, 1)
+        self.conv6SH = nn.Conv1d(hsize, hsize, 1)
+        self.conv7SH = nn.Conv1d(hsize, hsize, 1)
+        self.conv8SH = nn.Conv1d(hsize, 3, 1)
 
+        self.conv6N = nn.Conv1d(hsize, hsize, 1)
+        self.conv7N = nn.Conv1d(hsize, hsize, 1)
+        self.conv8N = nn.Conv1d(hsize, 1, 1)
 
-        self.bn1 = torch.nn.BatchNorm1d(self.hsize)
-        self.bn2 = torch.nn.BatchNorm1d(self.hsize)
-        self.bn3 = torch.nn.BatchNorm1d(self.hsize)
-        self.bn4 = torch.nn.BatchNorm1d(self.hsize)
+        def make_gn(C):
+            g = min(gn_groups, C)
+            while C % g != 0:
+                g -= 1
+            return nn.GroupNorm(g, C)
 
-        self.bn5 = torch.nn.BatchNorm1d(self.hsize)
-        self.bn6 = torch.nn.BatchNorm1d(self.hsize)
-        self.bn7 = torch.nn.BatchNorm1d(self.hsize)
+        self.n1 = make_gn(hsize)
+        self.n2 = make_gn(hsize)
+        self.n3 = make_gn(hsize)
+        self.n4 = make_gn(hsize)
+        self.n5 = make_gn(hsize)
+        self.n6 = make_gn(hsize)
+        self.n7 = make_gn(hsize)
+        self.n6N = make_gn(hsize)
+        self.n7N = make_gn(hsize)
+        self.n6SH = make_gn(hsize)
+        self.n7SH = make_gn(hsize)
 
-        self.bn6N = torch.nn.BatchNorm1d(self.hsize)
-        self.bn7N = torch.nn.BatchNorm1d(self.hsize)  
+        if actv_fn == 'relu':
+            self.act = nn.ReLU(inplace=True)
+        elif actv_fn == 'silu':
+            self.act = nn.SiLU(0.2, inplace=True)
+        else:
+            self.act = nn.SiLU(inplace=True)  # fast + smooth
 
-        self.bn6SH = torch.nn.BatchNorm1d(self.hsize)
-        self.bn7SH = torch.nn.BatchNorm1d(self.hsize)
-
-        self.actv_fn = nn.ReLU() if actv_fn=='relu' else nn.Softplus()
         self.sigmoid = nn.Sigmoid()
-        self.tan = nn.Tanh()
 
     def forward(self, x):
-        x1 = self.actv_fn(self.bn1(self.conv1(x)))
-        x2 = self.actv_fn(self.bn2(self.conv2(x1)))
-        x3 = self.actv_fn(self.bn3(self.conv3(x2)))
-        x4 = self.actv_fn(self.bn4(self.conv4(x3)))
-        x5 = self.actv_fn(self.bn5(self.conv5(torch.cat([x,x4],dim=1))))
+        x1 = self.act(self.n1(self.conv1(x)))
+        x2 = self.act(self.n2(self.conv2(x1)))
+        x3 = self.act(self.n3(self.conv3(x2)))
+        x4 = self.act(self.n4(self.conv4(x3)))
+        x5 = self.act(self.n5(self.conv5(torch.cat([x, x4], dim=1))))
 
-        # position pred
-        x6 = self.actv_fn(self.bn6(self.conv6(x5)))
-        x7 = self.actv_fn(self.bn7(self.conv7(x6)))
-        x8 = self.conv8(x7)
+        # position
+        x6 = self.act(self.n6(self.conv6(x5)))
+        x7 = self.act(self.n7(self.conv7(x6)))
+        pos = self.conv8(x7)
 
-        # scales pred
-        xN6 = self.actv_fn(self.bn6N(self.conv6N(x5)))
-        xN7 = self.actv_fn(self.bn7N(self.conv7N(xN6)))
-        xN8 = self.conv8N(xN7)
+        # scales
+        n6 = self.act(self.n6N(self.conv6N(x5)))
+        n7 = self.act(self.n7N(self.conv7N(n6)))
+        scales = self.sigmoid(self.conv8N(n7))
 
-        # shs pred
-        xSH6 = self.actv_fn(self.bn6SH(self.conv6SH(x5)))
-        xSH7 = self.actv_fn(self.bn7SH(self.conv7SH(xSH6)))
-        xSH8 = self.conv8SH(xSH7)
+        # shs
+        s6 = self.act(self.n6SH(self.conv6SH(x5)))
+        s7 = self.act(self.n7SH(self.conv7SH(s6)))
+        shs = self.sigmoid(self.conv8SH(s7))
 
-        # rotations = xN8[:,:4,:]
-        scales = self.sigmoid(xN8)
-        # scales = -1 * self.actv_fn(xN8[:,4:7,:])
-        # opacitys = self.sigmoid(xN8[:,7:8,:])
-        shs = self.sigmoid(xSH8)
+        return pos, scales, shs
 
-        return x8, scales, shs
+
+# class ShapeDecoder(nn.Module):
+#     '''
+#     The "Shape Decoder" in the POP paper Fig. 2. The same as the "shared MLP" in the SCALE paper.
+#     - with skip connection from the input features to the 4th layer's output features (like DeepSDF)
+#     - branches out at the second-to-last layer, one branch for position pred, one for normal pred
+#     '''
+#     def __init__(self, in_size, hsize = 256, actv_fn='softplus'):
+#         self.hsize = hsize
+#         super(ShapeDecoder, self).__init__()
+#         self.conv1 = torch.nn.Conv1d(in_size, self.hsize, 1)
+#         self.conv2 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv3 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv4 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv5 = torch.nn.Conv1d(self.hsize+in_size, self.hsize, 1)
+#         self.conv6 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv7 = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv8 = torch.nn.Conv1d(self.hsize, 3, 1)
+
+#         self.conv6SH = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv7SH = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv8SH = torch.nn.Conv1d(self.hsize, 3, 1)
+
+#         self.conv6N = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv7N = torch.nn.Conv1d(self.hsize, self.hsize, 1)
+#         self.conv8N = torch.nn.Conv1d(self.hsize, 1, 1)
+
+
+#         self.bn1 = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn2 = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn3 = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn4 = torch.nn.BatchNorm1d(self.hsize)
+
+#         self.bn5 = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn6 = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn7 = torch.nn.BatchNorm1d(self.hsize)
+
+#         self.bn6N = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn7N = torch.nn.BatchNorm1d(self.hsize)  
+
+#         self.bn6SH = torch.nn.BatchNorm1d(self.hsize)
+#         self.bn7SH = torch.nn.BatchNorm1d(self.hsize)
+
+#         self.actv_fn = nn.ReLU() if actv_fn=='relu' else nn.Softplus()
+#         self.sigmoid = nn.Sigmoid()
+#         self.tan = nn.Tanh()
+
+#     def forward(self, x):
+#         x1 = self.actv_fn(self.bn1(self.conv1(x)))
+#         x2 = self.actv_fn(self.bn2(self.conv2(x1)))
+#         x3 = self.actv_fn(self.bn3(self.conv3(x2)))
+#         x4 = self.actv_fn(self.bn4(self.conv4(x3)))
+#         x5 = self.actv_fn(self.bn5(self.conv5(torch.cat([x,x4],dim=1))))
+
+#         # position pred
+#         x6 = self.actv_fn(self.bn6(self.conv6(x5)))
+#         x7 = self.actv_fn(self.bn7(self.conv7(x6)))
+#         x8 = self.conv8(x7)
+
+#         # scales pred
+#         xN6 = self.actv_fn(self.bn6N(self.conv6N(x5)))
+#         xN7 = self.actv_fn(self.bn7N(self.conv7N(xN6)))
+#         xN8 = self.conv8N(xN7)
+
+#         # shs pred
+#         xSH6 = self.actv_fn(self.bn6SH(self.conv6SH(x5)))
+#         xSH7 = self.actv_fn(self.bn7SH(self.conv7SH(xSH6)))
+#         xSH8 = self.conv8SH(xSH7)
+
+#         # rotations = xN8[:,:4,:]
+#         scales = self.sigmoid(xN8)
+#         # scales = -1 * self.actv_fn(xN8[:,4:7,:])
+#         # opacitys = self.sigmoid(xN8[:,7:8,:])
+#         shs = self.sigmoid(xSH8)
+
+#         return x8, scales, shs
 
 
 def gen_transf_mtx_full_uv(verts, faces):

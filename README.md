@@ -1,40 +1,20 @@
 <div align="center">
 
-# <b>GaussianAvatar</b>: Towards Realistic Human Avatar Modeling from a Single Video via Animatable 3D Gaussians
 
-[Liangxiao Hu](https://huliangxiao.github.io/)<sup>1,&dagger;</sup>, [Hongwen Zhang](https://zhanghongwen.cn/)<sup>2</sup>, [Yuxiang Zhang](https://zhangyux15.github.io/)<sup>3</sup>, [Boyao Zhou](https://morpheo.inrialpes.fr/people/zhou/)<sup>3</sup>, [Boning Liu](https://liuboning2.github.io/)<sup>3</sup>, [Shengping Zhang](http://homepage.hit.edu.cn/zhangshengping)<sup>1,*</sup>, [Liqiang Nie](https://liqiangnie.github.io/)<sup>1</sup>,
+GaussianAvatar = POP-style canonical surface point/UV-posmap decoder + SMPL(X) LBS for deformation + 3DGS for differentiable rendering.
 
-<sup>1</sup>Harbin Institute of Technology <sup>2</sup>Beijing Normal University <sup>3</sup>Tsinghua University
-
-<sup>*</sup>Corresponding author <sup>&nbsp;&nbsp;&nbsp;&dagger;</sup>Work done during an internship at Tsinghua University
-
-### [Projectpage](https://huliangxiao.github.io/GaussianAvatar) · [Paper](https://arxiv.org/abs/2312.02134) · [Video](https://www.youtube.com/watch?v=a4g8Z9nCF-k)
-
-</div>
-
-## :mega: Updates
-[4/3/2024] The pretrained models for the other three people from People Snapshot are released on OneDrive.
-
-[7/2/2024] The scripts for your own video are released.
-
-[23/1/2024] Training and inference codes for People Snapshot are released.
-
-## Introduction
-
-We present GaussianAvatar, an efficient approach to creating realistic human avatars with dynamic 3D appearances from a single video. 
-
-![](live_demo/gaussianavatar.gif)
-
+PoP = The Power of Points for Modeling Humans in Clothing
 
 ## Installation
 
-To deploy and run GaussianAvatar, run the following scripts:
-```
-conda env create --file environment.yml
-conda activate gs-avatar
-```
+To deploy and run GaussianAvatar on compuate canada:
+Use the content under alliancecanenv
+
 
 Then, compile ```diff-gaussian-rasterization``` and ```simple-knn``` as in [3DGS](https://github.com/graphdeco-inria/gaussian-splatting) repository.
+
+git clone 
+
 
 ## Download models and data 
 
@@ -104,6 +84,8 @@ cd .. &  python train.py -s $path_to_data/$subject -m output/{$subject}_stage1 -
 ```
 
 ### Training for Stage 2
+
+Some need change from this issue(https://github.com/aipixel/GaussianAvatar/issues/31)
 
 - export predicted smpl:
 ```

@@ -123,7 +123,7 @@ class AvatarModel:
 
     def net_set(self, mode):
         assert mode in [0, 1, 2]
-
+       
         self.net = POP_no_unet(
             c_geom=self.net_parms.c_geom, # channels of the geometric features
             geom_layer_type=self.net_parms.geom_layer_type, # the type of architecture used for smoothing the geometric feature tensor
@@ -133,7 +133,10 @@ class AvatarModel:
             use_dropout=bool(self.net_parms.use_dropout), # whether use dropout in the pose feature UNet
             uv_feat_dim=2, # input dimension of the uv coordinates
         ).cuda()
-            
+
+        # # Compile the network
+        # self.net = torch.compile(self.net, mode="reduce-overhead")
+
         geo_feature = torch.ones(1, self.net_parms.c_geom, self.model_parms.inp_posmap_size, self.model_parms.inp_posmap_size).normal_(mean=0., std=0.01).float().cuda()
         self.geo_feature = nn.Parameter(geo_feature.requires_grad_(True))
         
