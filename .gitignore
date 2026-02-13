@@ -18,6 +18,7 @@
 #smpl files
 *.pkl
 *.out
+*.txt
 
 # optional: common generated folders
 output/
