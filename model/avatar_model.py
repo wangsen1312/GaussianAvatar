@@ -11,7 +11,7 @@ from utils.general_utils import worker_init_fn
 from utils.system_utils import mkdir_p
 from model.network import POP_no_unet
 from utils.general_utils import load_masks
-from gaussian_renderer import render_batch
+from gaussian_renderer import render_batch, render_batch_optimized
 from os.path import join
 import torch.nn as nn
 from model.modules  import UnetNoCond5DS
@@ -73,7 +73,8 @@ class AvatarModel:
         
         ## query_map store the sampled points from the cannonical smpl mesh, shape as [512. 512, 3] 
         query_map = torch.from_numpy(np.load(query_map_path)['posmap' + str(self.model_parms.query_posmap_size)]).reshape(-1,3)
-        query_points = query_map[valid_idx, :].cuda().contiguous()
+        #query_points = query_map[valid_idx, :].cuda().contiguous()
+        query_points = query_map[valid_idx.cpu(), :].cuda().contiguous()
         self.query_points = query_points[None].expand(self.batch_size, -1, -1)
         
         # we fix the opacity and rots of 3d gs as described in paper 
@@ -84,8 +85,8 @@ class AvatarModel:
         
         # we save the skinning weights from the cannonical mesh
         query_lbs = torch.from_numpy(np.load(query_lbs_path)).reshape(self.model_parms.query_posmap_size*self.model_parms.query_posmap_size, joint_num)
-        self.query_lbs = query_lbs[valid_idx, :][None].expand(self.batch_size, -1, -1).cuda().contiguous()
-        
+        # self.query_lbs = query_lbs[valid_idx, :][None].expand(self.batch_size, -1, -1).cuda().contiguous()
+        self.query_lbs = query_lbs[valid_idx.cpu(), :][None].expand(self.batch_size, -1, -1).cuda().contiguous()
         self.inv_mats = torch.linalg.inv(torch.load(mat_path)).expand(self.batch_size, -1, -1, -1).cuda()
         print('inv_mat shape: ', self.inv_mats.shape)
 
@@ -239,8 +240,11 @@ class AvatarModel:
         return torch.utils.data.DataLoader(self.train_dataset,
                                             batch_size = self.batch_size,
                                             shuffle = True,
-                                            num_workers = 4,
+                                            num_workers = 8,
                                             worker_init_fn = worker_init_fn,
+                                            pin_memory=True, 
+                                            persistent_workers=True,
+                                            prefetch_factor=2,
                                             drop_last = True)
 
     def getTestDataset(self,):
@@ -330,22 +334,20 @@ class AvatarModel:
         scale_loss = torch.mean(pred_scales)
 
         for batch_index in range(self.batch_size):
-            FovX = batch_data['FovX'][batch_index]
-            FovY = batch_data['FovY'][batch_index]
-            height = batch_data['height'][batch_index]
-            width = batch_data['width'][batch_index]
+            FovX = float(batch_data['FovX'][batch_index])
+            FovY = float(batch_data['FovY'][batch_index])
+            height = int(batch_data['height'][batch_index])
+            width = int(batch_data['width'][batch_index])
             world_view_transform = batch_data['world_view_transform'][batch_index]
             full_proj_transform = batch_data['full_proj_transform'][batch_index]
             camera_center = batch_data['camera_center'][batch_index]
         
-
             points = full_pred[batch_index]
-
             colors = pred_shs[batch_index]
             scales = pred_scales[batch_index]
 
             rendered_images.append(
-                render_batch(
+                render_batch_optimized(
                     points=points,
                     shs=None,
                     colors_precomp=colors,
@@ -360,7 +362,9 @@ class AvatarModel:
                     world_view_transform=world_view_transform,
                     full_proj_transform=full_proj_transform,
                     active_sh_degree=0,
-                    camera_center=camera_center
+                    camera_center=camera_center,
+                    means2D_requires_grad=False,
+                    antialiasing=False,
                 )
             )
 
@@ -427,10 +431,10 @@ class AvatarModel:
         scale_loss = torch.mean(pred_scales)
 
         for batch_index in range(self.batch_size):
-            FovX = batch_data['FovX'][batch_index]
-            FovY = batch_data['FovY'][batch_index]
-            height = batch_data['height'][batch_index]
-            width = batch_data['width'][batch_index]
+            FovX = float(batch_data['FovX'][batch_index])
+            FovY = float(batch_data['FovY'][batch_index])
+            height = int(batch_data['height'][batch_index])
+            width = int(batch_data['width'][batch_index])
             world_view_transform = batch_data['world_view_transform'][batch_index]
             full_proj_transform = batch_data['full_proj_transform'][batch_index]
             camera_center = batch_data['camera_center'][batch_index]
@@ -441,7 +445,7 @@ class AvatarModel:
             scales = pred_scales[batch_index]
         
             rendered_images.append(
-                render_batch(
+                render_batch_optimized(
                     points=points,
                     shs=None,
                     colors_precomp=colors,
@@ -456,7 +460,9 @@ class AvatarModel:
                     world_view_transform=world_view_transform,
                     full_proj_transform=full_proj_transform,
                     active_sh_degree=0,
-                    camera_center=camera_center
+                    camera_center=camera_center,
+                    means2D_requires_grad=False,
+                    antialiasing=False,
                 )
             )
 
@@ -517,22 +523,20 @@ class AvatarModel:
         pred_shs = pred_shs[:, self.valid_idx, ...].contiguous()
 
         for batch_index in range(self.batch_size):
-            FovX = batch_data['FovX'][batch_index]
-            FovY = batch_data['FovY'][batch_index]
-            height = batch_data['height'][batch_index]
-            width = batch_data['width'][batch_index]
+            FovX = float(batch_data['FovX'][batch_index])
+            FovY = float(batch_data['FovY'][batch_index])
+            height = int(batch_data['height'][batch_index])
+            width = int(batch_data['width'][batch_index])
             world_view_transform = batch_data['world_view_transform'][batch_index]
             full_proj_transform = batch_data['full_proj_transform'][batch_index]
             camera_center = batch_data['camera_center'][batch_index]
         
-
             points = full_pred[batch_index]
-
             colors = pred_shs[batch_index]
             scales = pred_scales[batch_index] 
         
             rendered_images.append(
-                render_batch(
+                render_batch_optimized(
                     points=points,
                     shs=None,
                     colors_precomp=colors,
@@ -547,7 +551,9 @@ class AvatarModel:
                     world_view_transform=world_view_transform,
                     full_proj_transform=full_proj_transform,
                     active_sh_degree=0,
-                    camera_center=camera_center
+                    camera_center=camera_center,
+                    means2D_requires_grad=False,
+                    antialiasing=True,
                 )
             )
 
@@ -591,8 +597,6 @@ class AvatarModel:
         pred_res,pred_scales, pred_shs, = self.net.forward(pose_featmap=pose_featmap,
                                                     geom_featmap=geom_featmap,
                                                     uv_loc=uv_coord_map)
-
-        
         
         pred_res = pred_res.permute([0,2,1]) * 0.02  #(B, H, W ,3)
         pred_point_res = pred_res[:, self.valid_idx, ...].contiguous()
@@ -601,7 +605,6 @@ class AvatarModel:
 
         pt_mats = torch.einsum('bnj,bjxy->bnxy', self.query_lbs, cano2live_jnt_mats)
         full_pred = torch.einsum('bnxy,bny->bnx', pt_mats[..., :3, :3], cano_deform_point) + pt_mats[..., :3, 3]
-
 
         pred_scales = pred_scales.permute([0,2,1])
 
@@ -613,21 +616,20 @@ class AvatarModel:
         pred_shs = pred_shs[:, self.valid_idx, ...].contiguous()
         # aiap_all_loss = 0
         for batch_index in range(self.batch_size):
-            FovX = batch_data['FovX'][batch_index]
-            FovY = batch_data['FovY'][batch_index]
-            height = batch_data['height'][batch_index]
-            width = batch_data['width'][batch_index]
-            world_view_transform = batch_data['world_view_transform'][batch_index]
-            full_proj_transform = batch_data['full_proj_transform'][batch_index]
+            FovX = float(fbatch_data['FovX'][batch_index])
+            FovY = float(fbatch_data['FovY'][batch_index])
+            height = int(fbatch_data['height'][batch_index])
+            width = int(fbatch_data['width'][batch_index])
+            world_view_transform = fbatch_data['world_view_transform'][batch_index]
+            full_proj_transform = fbatch_data['full_proj_transform'][batch_index]
             camera_center = batch_data['camera_center'][batch_index]
-        
 
             points = full_pred[batch_index]
             colors = pred_shs[batch_index]
             scales = pred_scales[batch_index]
 
             rendered_images.append(
-                render_batch(
+                render_batch_optimized(
                     points=points,
                     shs=None,
                     colors_precomp=colors,
@@ -642,7 +644,9 @@ class AvatarModel:
                     world_view_transform=world_view_transform,
                     full_proj_transform=full_proj_transform,
                     active_sh_degree=0,
-                    camera_center=camera_center
+                    camera_center=camera_center,
+                    means2D_requires_grad=False,
+                    antialiasing=True,
                 )
             )
 

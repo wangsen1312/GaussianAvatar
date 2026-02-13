@@ -218,10 +218,13 @@ class MonoDataset_train(Dataset):
 
             mask[mask < 128] = 0
             mask[mask >= 128] = 1
-            color_img = image * mask + (1 - mask) * 255
-            image = Image.fromarray(np.array(color_img, dtype=np.byte), "RGB")
+            # color_img = image * mask + (1 - mask) * 255
+            # image = Image.fromarray(np.array(color_img, dtype=np.byte), "RGB")
+            img_np = np.array(image, dtype=np.uint8)          # <-- add this
+            color_img = img_np * mask + (1 - mask) * 255
+            image = Image.fromarray(color_img.astype(np.uint8), "RGB")  # <-- change dtype
 
-        
+
         data_item = dict()
         if self.dataset_parms.train_stage == 2:
             data_item['inp_pos_map'] = inp_posmap.transpose(2,0,1)
@@ -372,9 +375,13 @@ class MonoDataset_test(Dataset):
 
             mask[mask < 128] = 0
             mask[mask >= 128] = 1
-            # color_img = image * mask 
-            color_img = image * mask + (1 - mask) * 255
-            image = Image.fromarray(np.array(color_img, dtype=np.byte), "RGB")
+            # # color_img = image * mask 
+            # color_img = image * mask + (1 - mask) * 255
+            # image = Image.fromarray(np.array(color_img, dtype=np.byte), "RGB")
+
+            img_np = np.array(image, dtype=np.uint8)          # <-- add this
+            color_img = img_np * mask + (1 - mask) * 255
+            image = Image.fromarray(color_img.astype(np.uint8), "RGB")  # <-- change dtype
 
     
         data_item = dict()

@@ -129,29 +129,72 @@ def safe_state(silent):
     torch.cuda.set_device(torch.device("cuda:0"))
 
 
-def to_cuda(items: dict, device, add_batch = False, precision = torch.float32):
+# def to_cuda(items: dict, device, add_batch = False, precision = torch.float32):
+#     items_cuda = dict()
+#     for key, data in items.items():
+#         if isinstance(data, torch.Tensor):
+#             items_cuda[key] = data.to(device)
+#         elif isinstance(data, np.ndarray):
+#             items_cuda[key] = torch.from_numpy(data).to(device)
+#         elif isinstance(data, dict):  # usually some float tensors
+#             for key2, data2 in data.items():
+#                 if isinstance(data2, np.ndarray):
+#                     data[key2] = torch.from_numpy(data2).to(device)
+#                 elif isinstance(data2, torch.Tensor):
+#                     data[key2] = data2.to(device)
+#                 else:
+#                     raise TypeError('Do not support other data types.')
+#                 if data[key2].dtype == torch.float32 or data[key2].dtype == torch.float64:
+#                     data[key2] = data[key2].to(precision)
+#             items_cuda[key] = data
+#         else:
+#             items_cuda[key] = data
+#         if isinstance(items_cuda[key], torch.Tensor) and\
+#                 (items_cuda[key].dtype == torch.float32 or items_cuda[key].dtype == torch.float64):
+#             items_cuda[key] = items_cuda[key].to(precision)
+#         if add_batch:
+#             if isinstance(items_cuda[key], torch.Tensor):
+#                 items_cuda[key] = items_cuda[key].unsqueeze(0)
+#             elif isinstance(items_cuda[key], dict):
+#                 for k in items_cuda[key].keys():
+#                     items_cuda[key][k] = items_cuda[key][k].unsqueeze(0)
+#             else:
+#                 items_cuda[key] = [items_cuda[key]]
+#     return items_cuda
+
+def to_cuda(items: dict, device, add_batch=False, precision=torch.float32):
+    # keys that MUST stay on CPU (avoid GPU->CPU sync inside renderer settings)
+    KEEP_ON_CPU = {"FovX", "FovY", "height", "width"}
     items_cuda = dict()
     for key, data in items.items():
-        if isinstance(data, torch.Tensor):
-            items_cuda[key] = data.to(device)
-        elif isinstance(data, np.ndarray):
-            items_cuda[key] = torch.from_numpy(data).to(device)
-        elif isinstance(data, dict):  # usually some float tensors
-            for key2, data2 in data.items():
-                if isinstance(data2, np.ndarray):
-                    data[key2] = torch.from_numpy(data2).to(device)
-                elif isinstance(data2, torch.Tensor):
-                    data[key2] = data2.to(device)
-                else:
-                    raise TypeError('Do not support other data types.')
-                if data[key2].dtype == torch.float32 or data[key2].dtype == torch.float64:
-                    data[key2] = data[key2].to(precision)
+        # ---- keep some scalar camera params on CPU ----
+        if key in KEEP_ON_CPU:
+            # keep as-is (likely torch tensor / numpy / python)
+            # If you want them as plain python numbers later, you can convert in the render loop.
             items_cuda[key] = data
         else:
-            items_cuda[key] = data
-        if isinstance(items_cuda[key], torch.Tensor) and\
-                (items_cuda[key].dtype == torch.float32 or items_cuda[key].dtype == torch.float64):
+            if isinstance(data, torch.Tensor):
+                items_cuda[key] = data.to(device, non_blocking=True)
+            elif isinstance(data, np.ndarray):
+                items_cuda[key] = torch.from_numpy(data).to(device, non_blocking=True)
+            elif isinstance(data, dict):  # usually some float tensors
+                for key2, data2 in data.items():
+                    if isinstance(data2, np.ndarray):
+                        data[key2] = torch.from_numpy(data2).to(device, non_blocking=True)
+                    elif isinstance(data2, torch.Tensor):
+                        data[key2] = data2.to(device, non_blocking=True)
+                    else:
+                        raise TypeError('Do not support other data types.')
+                    if data[key2].dtype in (torch.float32, torch.float64):
+                        data[key2] = data[key2].to(precision)
+                items_cuda[key] = data
+            else:
+                items_cuda[key] = data
+        # precision cast (only for CUDA tensors; leaving CPU scalars alone is fine)
+        if isinstance(items_cuda[key], torch.Tensor) and items_cuda[key].device.type == "cuda" and \
+           (items_cuda[key].dtype == torch.float32 or items_cuda[key].dtype == torch.float64):
             items_cuda[key] = items_cuda[key].to(precision)
+        # add batch dimension
         if add_batch:
             if isinstance(items_cuda[key], torch.Tensor):
                 items_cuda[key] = items_cuda[key].unsqueeze(0)
@@ -161,6 +204,7 @@ def to_cuda(items: dict, device, add_batch = False, precision = torch.float32):
             else:
                 items_cuda[key] = [items_cuda[key]]
     return items_cuda
+
 
 def getIdxMap_torch(img, offset=False):
     # img has shape [channels, H, W]

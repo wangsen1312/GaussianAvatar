@@ -1,11 +1,8 @@
 import numbers
 import math
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-
 
 class CBatchNorm2d(nn.Module):
     ''' Conditional batch normalization layer class.

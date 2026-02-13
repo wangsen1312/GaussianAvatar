@@ -1,0 +1,26 @@
+# images
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.bmp
+*.tif
+*.tiff
+
+# temp files
+*.npy
+*.npz
+*.pth
+*.pyc
+*.obj
+*.ply
+
+#smpl files
+*.pkl
+*.out
+
+# optional: common generated folders
+output/
+gs_data/
+runs/
+logs/

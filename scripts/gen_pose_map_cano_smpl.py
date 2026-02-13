@@ -1,5 +1,3 @@
-
-
 import numpy  as np
 import torch
 from os.path import join
@@ -23,6 +21,7 @@ def render_posmap(v_minimal, faces, uvs, faces_uvs, img_size=32):
     '''
     from posmap_generator.lib.renderer.gl.pos_render import PosRender
 
+    print('rendering pose map ...')
     # instantiate renderer
     rndr = PosRender(width=img_size, height=img_size)
 
@@ -53,9 +52,8 @@ def render_posmap(v_minimal, faces, uvs, faces_uvs, img_size=32):
 
 def save_obj(data_path, name):
     smpl_data = torch.load( data_path + '/smpl_parms.pth')
-    smpl_model = smplx.SMPL(model_path ='../assets/smpl_files/smpl',batch_size = 1)
+    smpl_model = smplx.SMPL(model_path ='../assets/smpl_files/smpl', batch_size = 1)
     cano_dir = os.path.join(data_path,)
-
 
     cano_smpl = smpl_model.forward(betas=smpl_data['beta'],
                             global_orient=smpl_cpose_param[:, :3],
@@ -98,12 +96,11 @@ def save_npz(data_path, res=128):
     np.savez(save_fn, **result)
 
 
-
 if __name__ == '__main__':
-    smplx_parm_path = '' # path to the folder that include smpl params
+    smplx_parm_path = '../gs_data/dynvideo_female/test/' # path to the folder that include smpl params
     parms_name = 'smpl_parms.pth'
     uv_template_fn = '../assets/template_mesh_smpl_uv.obj'
-    assets_path = ''    # path to the folder that include 'assets'
+    # assets_path = ''    # path to the folder that include 'assets'
 
     print('saving obj...')
     save_obj(smplx_parm_path, parms_name)

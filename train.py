@@ -2,7 +2,7 @@ import os
 import torch
 import lpips
 import torchvision
-import open3d as o3d
+import trimesh
 import sys
 import uuid
 from tqdm import tqdm
@@ -104,12 +104,14 @@ def train(model, net, opt, saving_epochs, checkpoint_epochs):
                     progress_bar.update(10)
 
                 if (first_iter-1) % opt.log_iter == 0:
-                    save_poitns = points.clone().detach().cpu().numpy()
-                    for i in range(save_poitns.shape[0]):
-                        pcd = o3d.geometry.PointCloud()
-                        pcd.points = o3d.utility.Vector3dVector(save_poitns[i])
-                        o3d.io.write_point_cloud(os.path.join(model.model_path, 'log',"pred_%d.ply" % i) , pcd)
-
+                    save_points = points.clone().detach().cpu().numpy()
+                    # for i in range(save_points.shape[0]):
+                    #     pcd = o3d.geometry.PointCloud()
+                    #     pcd.points = o3d.utility.Vector3dVector(save_points[i])
+                    #     o3d.io.write_point_cloud(os.path.join(model.model_path, 'log',"pred_%d.ply" % i) , pcd)
+                    for i in range(save_points.shape[0]):
+                        pc = trimesh.points.PointCloud(save_points[i])
+                        pc.export(os.path.join(model.model_path, 'log', f"pred_{i}.ply"))
                     torchvision.utils.save_image(image, os.path.join(model.model_path, 'log', '{0:05d}_pred'.format(first_iter) + ".png"))
                     torchvision.utils.save_image(gt_image, os.path.join(model.model_path, 'log', '{0:05d}_gt'.format(first_iter) + ".png"))
                     
